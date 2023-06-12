@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 from cv2 import VideoCapture
+# from collections import deque
+
 
 
 def distancepoints(point1, point2) : 
@@ -34,9 +36,9 @@ def selectcolor():
         print('please enter the number corresponding to the color you wish to select')
 
     return Lower, Upper
-
-
 print('============== *** Obtaining Input from video Feed *** =====================')
+
+
 count = 0
 ptstracked = []
 distance_threshold = 500  # Distance threshold for motion consistency
@@ -56,8 +58,7 @@ while(True):
     frame2draw = frame.copy()
     if not ok:
         print('Error - Video not Obtained')
-        break
-
+    
     #convert frame to HSV, obtain color threshold, apply morphological operations and threshold
     framehsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV) 
     mask = cv2.inRange(framehsv, Lower, Upper)
@@ -66,12 +67,12 @@ while(True):
     maskop = cv2.morphologyEx(maskop1, cv2.MORPH_CLOSE, (9,9))
     
     # obtaining contours from binary mask
-    contours, hierarchy = cv2.findContours(maskop, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     
     contour_data = []
     for c in contours:
         area = cv2.contourArea(c)
-        if area < 3000: 
+        if area < 5000: 
             continue
         ((x, y), radius) = cv2.minEnclosingCircle(c)
         contour_data.append((area, (x, y), radius))
@@ -87,41 +88,36 @@ while(True):
         centers.append((x, y))
         radiuslist.append(int(radius))
 
-    try:    
-        if count > 1: 
-            # Calculate optical flow for each center
-            prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            next_centers, status, _ = cv2.calcOpticalFlowPyrLK(prev_frame_gray, frame_gray, np.array(prev_centers, dtype=np.float32), None, **lk_params)
+    if count > 1:
+        # Calculate optical flow for each center
+        prev_frame_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        next_centers, status, _ = cv2.calcOpticalFlowPyrLK(prev_frame_gray, frame_gray, np.array(prev_centers, dtype=np.float32), None, **lk_params)
 
-            # Calculate speed and distance traveled for each center
-            for i in range(len(centers)):
-                prev_center = prev_centers[i]
-                next_center = next_centers[i]
-                speed = np.sqrt((next_center[0] - prev_center[0]) ** 2 + (next_center[1] - prev_center[1]) ** 2)
-                distance = np.sqrt((next_center[0] - centers[i][0]) ** 2 + (next_center[1] - centers[i][1]) ** 2)
-                print(f"Center {i+1}: Speed - {speed}, Distance - {distance}")
+        # Calculate speed and distance traveled for each center
+        for i in range(len(centers)):
+            prev_center = prev_centers[i]
+            next_center = next_centers[i]
+            speed = np.sqrt((next_center[0] - prev_center[0]) ** 2 + (next_center[1] - prev_center[1]) ** 2)
+            distance = np.sqrt((next_center[0] - centers[i][0]) ** 2 + (next_center[1] - centers[i][1]) ** 2)
+            print(f"Center {i+1}: Speed - {speed}, Distance - {distance}")
 
-                # Check motion consistency using distance and velocity thresholds
-                if distance < distance_threshold and speed < velocity_threshold:
-                    # ptstracked.append(next_center)
-                    # cv2.circle(frame2draw, (int(next_center[0]), int(next_center[1])), radiuslist[i], (0, 0, 255), 2)
-                    best_center = next_center
-                    best_distance = distance
-                    best_radius = i
-            
-            if best_center is not None:
-                ptstracked.append(best_center) 
-            cv2.circle(frame2draw, (int(best_center[0]), int(best_center[1])), radiuslist[i], (0, 0, 255), 2)
-        
-    except: print('No suitable contour')
+            # Check motion consistency using distance and velocity thresholds
+            if distance < distance_threshold and speed < velocity_threshold:
+                # ptstracked.append(next_center)
+                # cv2.circle(frame2draw, (int(next_center[0]), int(next_center[1])), radiuslist[i], (0, 0, 255), 2)
+                best_center = next_center
+                best_distance = distance
+                best_radius = i
     
-    
+    if best_center is not None:
+        ptstracked.append(best_center) 
+        cv2.circle(frame2draw, (int(best_center[0]), int(best_center[1])), radiuslist[i], (0, 0, 255), 2)
+ 
     print("=================HERE========================")
     ptstracked = ptstracked[-20:]
     ptstrackedNP = np.array(ptstracked, dtype=np.int32)
     cv2.polylines(frame2draw, [ptstrackedNP], False, (0, 0, 255), 3)
-    cv2.imshow('mask', maskop)
     cv2.imshow('final tracked frame', frame2draw)
     if cv2.waitKey(1) & 0xFF == ord('q'): break
     prev_frame = frame.copy()
